@@ -257,6 +257,89 @@ const filterBtns = document.querySelectorAll('.filter-btn');
 const loadingOverlay = document.getElementById('loadingOverlay');
 const navLinks = document.querySelectorAll('.nav-link');
 
+// Add new function to show loading state in popup
+function showLoadingStatus(apiName) {
+    // Remove existing status
+    const existingStatus = document.getElementById('api-status');
+    if (existingStatus) {
+        existingStatus.remove();
+    }
+    
+    // Create loading status indicator
+    const statusDiv = document.createElement('div');
+    statusDiv.id = 'api-status';
+    statusDiv.className = 'api-status';
+    
+    statusDiv.innerHTML = `
+        <div class="status-indicator">
+            <span class="status-dot loading"></span>
+            <span class="status-text">Loading ${apiName}</span>
+        </div>
+    `;
+    
+    // Add to bottom right corner
+    statusDiv.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 10px 15px;
+        border-radius: 8px;
+        font-size: 12px;
+        z-index: 1000;
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 215, 0, 0.3);
+    `;
+    
+    document.body.appendChild(statusDiv);
+}
+
+// Add new function to show failure status with redirect message
+function showFailureStatus() {
+    // Remove existing status
+    const existingStatus = document.getElementById('api-status');
+    if (existingStatus) {
+        existingStatus.remove();
+    }
+    
+    // Create failure status indicator
+    const statusDiv = document.createElement('div');
+    statusDiv.id = 'api-status';
+    statusDiv.className = 'api-status';
+    
+    statusDiv.innerHTML = `
+        <div class="status-indicator">
+            <span class="status-dot offline"></span>
+            <span class="status-text">API Failed - Redirecting to mock players</span>
+        </div>
+    `;
+    
+    // Add to bottom right corner
+    statusDiv.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 10px 15px;
+        border-radius: 8px;
+        font-size: 12px;
+        z-index: 1000;
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 0, 0, 0.3);
+    `;
+    
+    document.body.appendChild(statusDiv);
+    
+    // Auto-hide after 3 seconds
+    setTimeout(() => {
+        if (statusDiv && statusDiv.parentNode) {
+            statusDiv.remove();
+        }
+    }, 3000);
+}
+
 // Initialize the website
 document.addEventListener('DOMContentLoaded', function() {
     initializeWebsite();
@@ -302,6 +385,7 @@ document.addEventListener('DOMContentLoaded', function() {
         animateStats();
     }).catch(error => {
         console.error('❌ API testing failed, using mock data:', error);
+        showFailureStatus();
         API_CONFIG.activeApi = API_CONFIG.APIS.find(api => api.name === 'mock-data');
         updateAPIStatus();
         loadInitialData();
@@ -505,6 +589,9 @@ async function fetchCSVData(url, onProgress = null, maxRows = null) {
 async function testAvailableAPIs() {
     console.log('🔍 Testing aomstats.io API...');
     
+    // Show loading state
+    showLoadingStatus('aomstats.io-dumps');
+    
     // Check cache first (disabled temporarily to test fresh data)
     const cachedData = loadFromCache();
     if (false && cachedData && cachedData.leaderboard) { // Temporarily disabled cache
@@ -552,6 +639,7 @@ async function testAvailableAPIs() {
     } catch (error) {
         console.error('❌ aomstats.io API failed:', error.message);
         console.log('📊 Falling back to mock data');
+        showFailureStatus();
         API_CONFIG.activeApi = API_CONFIG.APIS.find(api => api.name === 'mock-data');
     }
 }

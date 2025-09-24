@@ -562,6 +562,11 @@ tr:hover {
     box-shadow: 0 0 10px rgba(244, 67, 54, 0.5);
 }
 
+.status-dot.loading {
+    background: #ffd700;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
 .status-text {
     font-weight: 600;
     color: #ffd700;
