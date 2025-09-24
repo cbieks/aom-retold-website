@@ -196,8 +196,9 @@ debugAOM.clearCache()     // Clear all cached data
 
 ## 📞 Contact
 
-- **GitHub:** [@cbieks](https://github.com/cbieks)
+- **GitHub:** [cbieks](https://github.com/cbieks)
 - **Website:** [https://cbieks.github.io/aom-retold-website/](https://cbieks.github.io/aom-retold-website/)
+- **Email:** [cbieker@usc.edu](mailto:cbieker@usc.edu) 
 
 ---
 
