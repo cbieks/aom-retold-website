@@ -2,7 +2,7 @@
 
 A comprehensive web application for tracking and displaying player statistics, rankings, and match history for Age of Mythology: Retold. Built with modern web technologies and integrated with real-time data from the aomstats.io API.
 
-![Age of Mythology: Retold Stats](https://images.igdb.com/igdb/image/upload/t_cover_big/co8x8j.jpg)
+![Age of Mythology: Retold Stats](https://cbieks.github.io/aom-retold-website/)
 
 ## 🎮 Features
 
