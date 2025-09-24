@@ -198,7 +198,8 @@ debugAOM.clearCache()     // Clear all cached data
 
 - **GitHub:** [cbieks](https://github.com/cbieks)
 - **Website:** [https://cbieks.github.io/aom-retold-website/](https://cbieks.github.io/aom-retold-website/)
-- **Email:** [cbieker@usc.edu](mailto:cbieker@usc.edu) 
+- **Email:** [cbieker@usc.edu](mailto:cbieker@usc.edu)
+- **Linkedin** [www.linkedin.com/in/cameron-bieker](https://www.linkedin.com/in/cameron-bieker/)
 
 ---
 
