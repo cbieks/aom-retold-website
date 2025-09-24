@@ -237,6 +237,7 @@ let isLoading = false;
 // Leaderboard pagination
 let currentPage = 1;
 const playersPerPage = 100;
+let currentLeaderboardType = 'supremacy-1v1';
 
 // DOM Elements
 const playerSearch = document.getElementById('playerSearch');
@@ -261,6 +262,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeWebsite();
     setupEventListeners();
     
+    
     // Add global cache clear function for debugging
     window.clearCache = () => {
         console.log('🗑️ Clearing cache...');
@@ -269,6 +271,18 @@ document.addEventListener('DOMContentLoaded', function() {
         allPlayers = [...mockPlayers];
         console.log('✅ Cache cleared');
         location.reload();
+    };
+    
+    // Add function to force fresh data load
+    window.forceFreshLoad = () => {
+        console.log('🔄 Forcing fresh data load...');
+        localStorage.removeItem(CACHE_KEY);
+        csvDataCache = { players: null, matches: null, leaderboard: null, lastUpdated: null };
+        testAvailableAPIs().then(() => {
+            updateAPIStatus();
+            loadInitialData();
+    animateStats();
+        });
     };
     
     // Add debug function to check what's happening
@@ -291,18 +305,20 @@ document.addEventListener('DOMContentLoaded', function() {
         API_CONFIG.activeApi = API_CONFIG.APIS.find(api => api.name === 'mock-data');
         updateAPIStatus();
         loadInitialData();
-        animateStats();
+    animateStats();
     });
 });
 
 function initializeWebsite() {
-    // Set initial stats
-    document.getElementById('totalPlayers').textContent = '12,847';
-    document.getElementById('totalMatches').textContent = '1,234,567';
-    document.getElementById('avgRating').textContent = '1,856';
+    // Clear initial stats - will be populated when real data loads
+    document.getElementById('totalPlayers').textContent = 'Loading...';
+    document.getElementById('totalMatches').textContent = 'Loading...';
+    document.getElementById('avgRating').textContent = 'Loading...';
     
-    // Initialize leaderboard
-    populateLeaderboard();
+    // Don't populate leaderboard yet - wait for data to load
+    if (leaderboardBody) {
+        leaderboardBody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem; color: #999;">Loading player data...</td></tr>';
+    }
 }
 
 function setupEventListeners() {
@@ -316,7 +332,9 @@ function setupEventListeners() {
 
     if (searchBtn) {
         searchBtn.addEventListener('click', () => {
-            const query = playerSearch.value.trim();
+            let query = playerSearch.value.trim();
+            // Remove clan tag brackets if user types them (e.g., "[CLAN]username" -> "username")
+            query = query.replace(/^\[.*?\]/, '');
             if (query) {
                 fetchPlayerStats(query);
             }
@@ -325,9 +343,9 @@ function setupEventListeners() {
 
     if (closeResults) {
         closeResults.addEventListener('click', () => {
-            searchResults.classList.add('hidden');
+        searchResults.classList.add('hidden');
             playerStats.innerHTML = '';
-        });
+    });
     }
 
     if (loadMoreBtn) {
@@ -352,7 +370,7 @@ function setupEventListeners() {
         btn.addEventListener('click', function() {
             const filter = this.dataset.filter;
             filterLeaderboard(filter);
-
+            
             // Update active filter
             filterBtns.forEach(b => b.classList.remove('active'));
             this.classList.add('active');
@@ -360,32 +378,42 @@ function setupEventListeners() {
     });
 }
 
-// CSV Parsing Utilities with optimized performance
+// Optimized CSV Parsing with streaming
 async function parseCSV(csvText, onProgress = null, maxRows = null) {
     const lines = csvText.split('\n');
     const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
     const data = [];
-    const totalLines = lines.length - 1; // Exclude header
+    const totalLines = lines.length - 1;
     const processLimit = maxRows || totalLines;
     
     console.log(`📊 Parsing CSV: ${Math.min(processLimit, totalLines)} rows to process (${totalLines} total available)`);
     
-    // Much larger chunk size for better performance
-    const chunkSize = 5000;
+        // Load from the end where ranked players are located
+        let startIndex = 1;
+        let endIndex = lines.length;
+        
+        if (maxRows && maxRows < totalLines) {
+            // Load from the end of the file where ranked players are
+            const sampleSize = Math.min(maxRows, totalLines);
+            startIndex = Math.max(1, totalLines - sampleSize + 1);
+            endIndex = lines.length;
+            console.log(`📊 Loading from end: rows ${startIndex} to ${endIndex - 1} (${endIndex - startIndex} rows) to find ranked players`);
+        }
+    
+    // Process in larger chunks for better performance
+    const chunkSize = 10000;
     let processedLines = 0;
     
-    for (let i = 1; i < lines.length && processedLines < processLimit; i += chunkSize) {
-        const chunkEnd = Math.min(i + chunkSize, lines.length, i + (processLimit - processedLines));
+    for (let i = startIndex; i < endIndex && processedLines < processLimit; i += chunkSize) {
+        const chunkEnd = Math.min(i + chunkSize, endIndex, i + (processLimit - processedLines));
         
-        // Process chunk in one go for better performance
+        // Process chunk efficiently
         for (let j = i; j < chunkEnd; j++) {
             const line = lines[j];
             if (line.trim()) {
-                // Optimized CSV parsing - avoid multiple splits and maps
                 const values = line.split(',');
                 const row = {};
                 
-                // Direct assignment instead of forEach for speed
                 for (let k = 0; k < headers.length && k < values.length; k++) {
                     row[headers[k]] = values[k].trim().replace(/"/g, '');
                 }
@@ -394,14 +422,14 @@ async function parseCSV(csvText, onProgress = null, maxRows = null) {
             }
         }
         
-        // Update progress less frequently for better performance
-        if (onProgress && processedLines % 1000 === 0) {
+        // Update progress less frequently
+        if (onProgress && processedLines % 5000 === 0) {
             const progress = Math.round((processedLines / processLimit) * 100);
             onProgress(progress, processedLines, processLimit);
         }
         
-        // Allow UI to update by yielding control
-        if (i % (chunkSize * 2) === 0) {
+        // Yield control to prevent UI freezing
+        if (i % (chunkSize * 3) === 0) {
             await new Promise(resolve => setTimeout(resolve, 0));
         }
     }
@@ -410,205 +438,205 @@ async function parseCSV(csvText, onProgress = null, maxRows = null) {
     return data;
 }
 
+// Optimized CSV fetching with timeout and error handling
 async function fetchCSVData(url, onProgress = null, maxRows = null) {
     try {
-        console.log(`Fetching CSV from: ${url}`);
-        // Create an AbortController for timeout
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout to prevent hanging
-        
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-                'Accept': 'text/csv,application/csv,application/gzip',
-                'User-Agent': 'AOM-Stats-Website/1.0'
-            },
-            mode: 'cors',
-            signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-            throw new Error(`Failed to fetch CSV: ${response.status} ${response.statusText}`);
-        }
-        
-        // Check if the response is gzipped
-        const contentType = response.headers.get('content-type') || '';
-        const isGzipped = url.includes('.gz') || contentType.includes('gzip');
-        const isLocalProxy = url.includes('proxy?') || url.includes('proxy.php');
-        
-        if (isGzipped && !isLocalProxy) {
-            console.log('CSV is gzipped, attempting to decompress with pako...');
-            try {
-                // Get the response as an array buffer for binary data
-                const arrayBuffer = await response.arrayBuffer();
-                const uint8Array = new Uint8Array(arrayBuffer);
-                
-                // Decompress using pako
-                const decompressed = pako.inflate(uint8Array, { to: 'string' });
-                console.log('Successfully decompressed gzipped CSV');
-                console.log('CSV text preview:', decompressed.substring(0, 200));
-                return await parseCSV(decompressed, onProgress, maxRows);
-            } catch (decompressError) {
-                console.error('Failed to decompress gzipped CSV:', decompressError);
-                throw new Error('Failed to decompress gzipped CSV file');
-            }
-        } else if (isLocalProxy) {
-            console.log('Using local servlet proxy - content should already be decompressed');
-        }
-        
-        const csvText = await response.text();
-        console.log('CSV text preview:', csvText.substring(0, 200));
-        return await parseCSV(csvText, onProgress, maxRows);
+      console.log(`🌐 Fetching CSV from: ${url}`);
+  
+      // 15s timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        console.log('⏰ Request timeout, aborting...');
+        controller.abort();
+      }, 15000);
+  
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Accept': 'text/csv,application/csv,application/gzip,application/x-gzip',
+          // User-Agent is ignored by browsers; harmless
+        },
+        // mode:'cors' not needed for most proxy URLs, but OK to leave
+        signal: controller.signal,
+      });
+  
+      clearTimeout(timeoutId);
+  
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+  
+      // Read raw bytes once; decide gzip by *bytes* or *headers*, not URL.
+      const arrayBuffer = await response.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+  
+      // Detect gzip by magic number 0x1f, 0x8b (31,139) or by headers.
+      const contentType = (response.headers.get('content-type') || '').toLowerCase();
+      const contentEncoding = (response.headers.get('content-encoding') || '').toLowerCase();
+      const looksLikeGzip = bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
+      const headerSaysGzip =
+        contentEncoding.includes('gzip') ||
+        contentType.includes('application/gzip') ||
+        contentType.includes('application/x-gzip');
+  
+      let csvText;
+      if (looksLikeGzip || headerSaysGzip) {
+        console.log('📦 Decompressing gzipped CSV (magic/header detected)…');
+        csvText = pako.inflate(bytes, { to: 'string' });
+        console.log('✅ Decompression successful');
+      } else {
+        // If a proxy already decompressed it, treat as plain text.
+        csvText = new TextDecoder('utf-8').decode(bytes);
+      }
+  
+      return await parseCSV(csvText, onProgress, maxRows);
+  
     } catch (error) {
-        console.error('CSV fetch error:', error);
-        throw error;
+      if (error.name === 'AbortError') {
+        throw new Error('Request timed out - the server is taking too long to respond');
+      }
+      console.error('❌ CSV fetch error:', error);
+      throw error;
     }
-}
+  }
+  
 
-// API Testing and Discovery
+// Optimized API testing with direct proxy usage
 async function testAvailableAPIs() {
-    console.log('🔍 Testing available APIs for Age of Mythology: Retold...');
+    console.log('🔍 Testing aomstats.io API...');
     
-    // Check cache first
+    // Check cache first (disabled temporarily to test fresh data)
     const cachedData = loadFromCache();
-    if (cachedData && cachedData.leaderboard) {
+    if (false && cachedData && cachedData.leaderboard) { // Temporarily disabled cache
         console.log('📦 Using cached data');
         csvDataCache = cachedData;
         allPlayers = processCSVPlayers(cachedData.leaderboard);
         API_CONFIG.activeApi = API_CONFIG.APIS.find(api => api.name === 'aomstats.io-dumps');
         return;
     }
-    
-    // Test aomstats.io first (most likely to work)
-    const aomstatsApi = API_CONFIG.APIS.find(api => api.name === 'aomstats.io-dumps');
-    if (aomstatsApi) {
-        try {
-            console.log('Testing aomstats.io-dumps...');
-            
-            // Use working proxy directly
-            const proxyUrl = 'https://api.codetabs.com/v1/proxy?quest=https%3A%2F%2Faomstats.io%2Fapi%2Fdb_dumps';
-            console.log('Using proxy:', proxyUrl);
-            
-            const response = await fetch(proxyUrl, {
-                method: 'GET',
-                headers: {
-                    'Accept': 'application/json',
-                    'User-Agent': 'AOM-Stats-Website/1.0'
-                }
-            });
-            
-            if (response.ok) {
-                const dumpsData = await response.json();
-                console.log('✅ aomstats.io-dumps available:', dumpsData);
-                aomstatsApi.available = true;
-                API_CONFIG.activeApi = aomstatsApi;
-                
-                // Load the CSV data
-                await loadLatestCSVData(aomstatsApi, dumpsData);
-                return;
-            } else {
-                console.log('❌ aomstats.io-dumps failed with status:', response.status);
-            }
-        } catch (error) {
-            console.log('❌ aomstats.io-dumps failed:', error.message);
-        }
-    }
-    
-    // If aomstats.io fails, fall back to mock data
-    console.log('📊 Using mock data as fallback');
-    API_CONFIG.activeApi = API_CONFIG.APIS.find(api => api.name === 'mock-data');
-}
 
-async function loadLatestCSVData(api, dumpsData) {
+    const aomstatsApi = API_CONFIG.APIS.find(api => api.name === 'aomstats.io-dumps');
+    
     try {
-        console.log('📥 Loading latest CSV data from aomstats.io...');
+        console.log('🌐 Testing aomstats.io API via proxy...');
         
-        if (dumpsData.leaderboard && dumpsData.leaderboard.url) {
-            console.log('Loading leaderboard data...');
-            const leaderboardUrl = `https://aomstats.io${dumpsData.leaderboard.url}`;
-            const leaderboardProxy = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(leaderboardUrl)}`;
-            
-            console.log('Fetching leaderboard via proxy:', leaderboardProxy);
-            
-            const csvResponse = await fetch(leaderboardProxy, {
-                method: 'GET',
-                headers: {
-                    'Accept': 'text/csv,application/csv,application/gzip',
-                    'User-Agent': 'AOM-Stats-Website/1.0'
-                }
-            });
-            
-            if (!csvResponse.ok) {
-                throw new Error(`CSV request failed: ${csvResponse.status}`);
+        // Use working proxy directly
+        const proxyUrl = 'https://api.codetabs.com/v1/proxy?quest=https%3A%2F%2Faomstats.io%2Fapi%2Fdb_dumps';
+        
+        const response = await fetch(proxyUrl, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json',
+                'User-Agent': 'AOM-Stats-Website/1.0'
             }
-            
-            // Check if it's gzipped
-            const contentType = csvResponse.headers.get('content-type') || '';
-            const isGzipped = leaderboardUrl.includes('.gz') || contentType.includes('gzip');
-            
-            let csvText;
-            if (isGzipped) {
-                console.log('📦 Decompressing gzipped CSV...');
-                const arrayBuffer = await csvResponse.arrayBuffer();
-                const uint8Array = new Uint8Array(arrayBuffer);
-                csvText = pako.inflate(uint8Array, { to: 'string' });
-            } else {
-                csvText = await csvResponse.text();
-            }
-            
-            console.log('📊 Parsing CSV data...');
-            const csvData = await parseCSV(csvText, null, 5000); // Load only 5000 players initially
-            const realPlayers = processCSVPlayers(csvData);
-            
-            // Store in cache
-            csvDataCache.leaderboard = csvData;
-            csvDataCache.lastUpdated = new Date();
-            saveToCache(csvDataCache);
-            
-            // Update players
-            allPlayers = realPlayers;
-            
-            console.log(`✅ Loaded ${realPlayers.length} real players from aomstats.io`);
-        } else {
-            throw new Error('No leaderboard data found in API response');
+        });
+        
+        if (!response.ok) {
+            throw new Error(`API request failed: ${response.status}`);
         }
+        
+        const dumpsData = await response.json();
+        console.log('✅ aomstats.io API available:', dumpsData);
+        
+        // Validate response structure
+        if (!dumpsData.leaderboard || !dumpsData.leaderboard.url) {
+            throw new Error('Invalid API response structure');
+        }
+        
+        aomstatsApi.available = true;
+        API_CONFIG.activeApi = aomstatsApi;
+        
+        // Load leaderboard data efficiently
+        await loadLeaderboardData(dumpsData);
         
     } catch (error) {
-        console.error('❌ Failed to load CSV data:', error);
+        console.error('❌ aomstats.io API failed:', error.message);
+        console.log('📊 Falling back to mock data');
+        API_CONFIG.activeApi = API_CONFIG.APIS.find(api => api.name === 'mock-data');
+    }
+}
+
+// Optimized leaderboard data loading
+async function loadLeaderboardData(dumpsData) {
+    try {
+        console.log('📥 Loading leaderboard data...');
+        console.log(`📊 Total players available: ${dumpsData.leaderboard.num_entries.toLocaleString()}`);
+        
+        const leaderboardUrl = `https://aomstats.io${dumpsData.leaderboard.url}`;
+        const proxyUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(leaderboardUrl)}`;
+        
+        console.log('🌐 Fetching via proxy:', proxyUrl);
+        
+        // Load a smaller sample but from the very end where top players should be
+        const maxPlayers = 200000; // Load 200k from the end to find ranked players
+        
+        const csvData = await fetchCSVData(proxyUrl, (progress, processed, total) => {
+            console.log(`📊 Loading progress: ${progress}% (${processed.toLocaleString()}/${total.toLocaleString()})`);
+        }, maxPlayers);
+        
+        console.log(`✅ Loaded ${csvData.length} player records`);
+        
+        // Load recent matches data (latest week)
+        if (dumpsData.weekly_matches && dumpsData.weekly_matches.length > 0) {
+            const latestMatch = dumpsData.weekly_matches[0]; // Most recent week
+            const matchesUrl = `https://aomstats.io${latestMatch.url}`;
+            const matchesProxyUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(matchesUrl)}`;
+            
+            console.log('🌐 Loading recent matches:', matchesUrl);
+            
+            try {
+                const matchesData = await fetchCSVData(matchesProxyUrl, null, 50000); // Load 50k recent matches
+                csvDataCache.matches = matchesData;
+                console.log(`✅ Loaded ${matchesData.length} recent matches`);
+            } catch (error) {
+                console.warn('⚠️ Failed to load matches data:', error);
+                csvDataCache.matches = [];
+            }
+        }
+        
+        // Process and cache the data (filter for current leaderboard type)
+        const realPlayers = processCSVPlayers(csvData, currentLeaderboardType);
+        allPlayers = realPlayers;
+        
+        // Cache the data
+        csvDataCache.leaderboard = csvData;
+        csvDataCache.lastUpdated = new Date();
+        saveToCache(csvDataCache);
+        
+        console.log(`🎉 Successfully loaded ${realPlayers.length} real players from aomstats.io!`);
+        console.log('🏆 Top 5 real players:', realPlayers.slice(0, 5).map(p => `${p.username} (${p.rating})`));
+        console.log('📊 Sample real player data:', realPlayers[0]);
+        
+        
+        // Success notification removed
+        
+    } catch (error) {
+        console.error('❌ Failed to load leaderboard data:', error);
         throw error;
     }
 }
+
+// Success notification function removed
 
 // API Functions
 async function fetchPlayerSearch(query) {
     const api = API_CONFIG.activeApi;
     if (!api) return [];
 
-    if (api.dataType === 'mock') {
+    if (api.dataType === 'mock' || api.dataType === 'csv-dumps') {
         return allPlayers.filter(player =>
             player.username.toLowerCase().includes(query.toLowerCase())
-        ).slice(0, 10); // Limit suggestions
-    } else if (api.dataType === 'csv-dumps') {
-        // Search in the already loaded allPlayers array
-        return allPlayers.filter(player =>
-            player.username.toLowerCase().includes(query.toLowerCase())
-        ).slice(0, 10); // Limit suggestions
+        ).slice(0, 10);
     } else {
-        // For live APIs, implement actual fetch
         const url = `${api.baseUrl}${api.endpoints.PLAYERS}?query=${encodeURIComponent(query)}`;
-        console.log(`🔍 Searching player via ${api.name}:`, url);
         try {
             const response = await fetch(url);
             if (!response.ok) {
-                throw new Error(`Player search failed: ${response.status} ${response.statusText}`);
+                throw new Error(`Player search failed: ${response.status}`);
             }
-            const data = await response.json();
-            console.log(`✅ Player search from ${api.name}:`, data);
-            return data;
+            return await response.json();
         } catch (error) {
-            console.error(`❌ Player search API error (${api.name}):`, error);
+            console.error(`❌ Player search API error:`, error);
             return [];
         }
     }
@@ -623,25 +651,22 @@ async function fetchPlayerStats(username) {
     if (api.dataType === 'mock' || api.dataType === 'csv-dumps') {
         player = allPlayers.find(p => p.username.toLowerCase() === username.toLowerCase());
     } else {
-        // For live APIs, implement actual fetch
         const url = `${api.baseUrl}${api.endpoints.PLAYERS}?username=${encodeURIComponent(username)}`;
-        console.log(`📊 Fetching player stats via ${api.name}:`, url);
         try {
             const response = await fetch(url);
             if (!response.ok) {
-                throw new Error(`Player stats failed: ${response.status} ${response.statusText}`);
+                throw new Error(`Player stats failed: ${response.status}`);
             }
             player = await response.json();
-            console.log(`✅ Player stats from ${api.name}:`, player);
         } catch (error) {
-            console.error(`❌ Player stats API error (${api.name}):`, error);
+            console.error(`❌ Player stats API error:`, error);
             return null;
         }
     }
 
-    if (player) {
-        displayPlayerStats(player);
-    } else {
+        if (player) {
+            displayPlayerStats(player);
+        } else {
         alert('Player not found!');
     }
 }
@@ -654,17 +679,14 @@ async function fetchLeaderboard() {
         return allPlayers;
     } else {
         const url = `${api.baseUrl}${api.endpoints.LEADERBOARD}`;
-        console.log(`🏆 Fetching leaderboard via ${api.name}:`, url);
         try {
             const response = await fetch(url);
             if (!response.ok) {
-                throw new Error(`Leaderboard failed: ${response.status} ${response.statusText}`);
+                throw new Error(`Leaderboard failed: ${response.status}`);
             }
-            const data = await response.json();
-            console.log(`✅ Leaderboard from ${api.name}:`, data);
-            return data;
+            return await response.json();
         } catch (error) {
-            console.error(`❌ Leaderboard API error (${api.name}):`, error);
+            console.error(`❌ Leaderboard API error:`, error);
             return [];
         }
     }
@@ -675,7 +697,6 @@ async function fetchGlobalStats() {
     if (!api) return {};
 
     if (api.dataType === 'mock' || api.dataType === 'csv-dumps') {
-        // Calculate global stats from allPlayers
         const totalPlayers = allPlayers.length;
         const totalMatches = allPlayers.reduce((sum, p) => sum + p.totalMatches, 0);
         const avgRating = totalPlayers > 0 ? (allPlayers.reduce((sum, p) => sum + p.rating, 0) / totalPlayers).toFixed(0) : 0;
@@ -683,30 +704,27 @@ async function fetchGlobalStats() {
         return {
             totalPlayers: totalPlayers,
             totalMatches: totalMatches,
-            activePlayers: totalPlayers, // Assuming all loaded players are active
+            activePlayers: totalPlayers,
             avgRating: parseInt(avgRating)
         };
     } else {
         const url = `${api.baseUrl}${api.endpoints.GLOBAL_STATS}`;
-        console.log(`🌍 Fetching global stats via ${api.name}:`, url);
         try {
             const response = await fetch(url);
             if (!response.ok) {
-                throw new Error(`Global stats failed: ${response.status} ${response.statusText}`);
+                throw new Error(`Global stats failed: ${response.status}`);
             }
-            const data = await response.json();
-            console.log(`✅ Global stats from ${api.name}:`, data);
-            return data;
+            return await response.json();
         } catch (error) {
-            console.error(`❌ Global stats API error (${api.name}):`, error);
+            console.error(`❌ Global stats API error:`, error);
             return {};
         }
     }
 }
 
-// UI Update Functions
+// Enhanced API Status Display
 function updateAPIStatus() {
-    // Remove existing status if it exists
+    // Remove existing status
     const existingStatus = document.getElementById('api-status');
     if (existingStatus) {
         existingStatus.remove();
@@ -719,10 +737,15 @@ function updateAPIStatus() {
     
     if (API_CONFIG.activeApi) {
         const api = API_CONFIG.activeApi;
+        const isRealData = api.dataType === 'csv-dumps' && allPlayers.length > 8;
+        const statusClass = api.available ? 'online' : 'offline';
+        const dataType = isRealData ? 'Real Data' : 'Mock Data';
+        
         statusDiv.innerHTML = `
             <div class="status-indicator">
-                <span class="status-dot ${api.available ? 'online' : 'offline'}"></span>
-                <span class="status-text">${api.name} - ${api.available ? 'Online' : 'Offline'}</span>
+                <span class="status-dot ${statusClass}"></span>
+                <span class="status-text">${api.name} - ${dataType}</span>
+                ${isRealData ? `<span class="player-count">(${allPlayers.length.toLocaleString()} players)</span>` : ''}
             </div>
         `;
     } else {
@@ -734,22 +757,38 @@ function updateAPIStatus() {
         `;
     }
     
-    // Add to header
-    const header = document.querySelector('header');
-    if (header) {
-        header.appendChild(statusDiv);
-    }
+    // Add to bottom right corner
+    statusDiv.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 10px 15px;
+        border-radius: 8px;
+        font-size: 12px;
+        z-index: 1000;
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 215, 0, 0.3);
+    `;
+    
+    document.body.appendChild(statusDiv);
 }
 
 function displayPlayerStats(player) {
     if (!searchResults || !playerStats) return;
-
+    
+    // Get real match history
+    const matchHistory = getPlayerMatchHistory(player.id, 10);
+    
     searchResults.classList.remove('hidden');
     playerStats.innerHTML = `
         <div class="player-header">
-            <h2 class="player-username">${player.username}</h2>
+            <h2 class="player-username">
+                ${player.clanTag ? `<span class="clan-tag">[${player.clanTag}]</span>` : ''}${player.username}
+            </h2>
             <span class="player-rating">Rating: ${player.rating}</span>
-        </div>
+            </div>
         <div class="player-details">
             <p>Rank: #${player.rank}</p>
             <p>Wins: ${player.wins}</p>
@@ -758,28 +797,76 @@ function displayPlayerStats(player) {
             <p>Favorite God: ${player.favoriteGod}</p>
             <p>Total Matches: ${player.totalMatches}</p>
             <p>Current Streak: ${player.currentStreak}</p>
-            <p>Highest Rank: ${player.highestRank}</p>
-            <p>Highest Rating: ${player.highestRating}</p>
+            <p>Highest Rank: ${player.highestRank || 'N/A'}</p>
+            <p>Highest Rating: ${player.highestRating || 'N/A'}</p>
             <p>Last Match: ${player.lastMatchDate ? player.lastMatchDate.toLocaleDateString() : 'N/A'}</p>
-            <p>Country: ${player.country}</p>
+            <p>Country: ${player.country || 'Unknown'}</p>
             ${player.socialLink ? `<p><a href="${player.socialLink}" target="_blank">Social Link</a></p>` : ''}
-        </div>
-        <!-- Add more stats here -->
-        <h3>Recent Matches</h3>
-        <div class="recent-matches">
-            ${player.recentMatches.map(match => `
-                <div class="match-item">
-                    <span>vs. ${match.opponent}</span>
-                    <span>${match.result}</span>
-                    <span class="rating-change">${match.rating}</span>
-                </div>
-            `).join('')}
+            </div>
+        <div class="matches-section">
+            <div class="matches-header">
+                <h3>Recent Matches</h3>
+                <div class="match-filters">
+                    <button class="filter-btn active" data-filter="all">All</button>
+                    <button class="filter-btn" data-filter="ranked">Ranked 1v1</button>
+                    <button class="filter-btn" data-filter="custom">Custom/Quickplay</button>
+            </div>
+            </div>
+            <div class="recent-matches" id="recentMatches">
+            ${matchHistory.length > 0 ? matchHistory.map(match => `
+                <div class="match-item ${match.result === 'W' ? 'win' : 'loss'}" data-match-type="${match.matchType || 'ranked'}">
+                    <div class="match-opponent">vs. ${match.opponent}</div>
+                    <div class="match-result ${match.result === 'W' ? 'win' : 'loss'}">${match.result}</div>
+                    ${match.isRanked ? `
+                        <div class="match-rating ${match.ratingChange >= 0 ? 'positive' : 'negative'}">
+                            ${match.ratingChange >= 0 ? '+' : ''}${match.ratingChange}
+            </div>
+                    ` : '<div class="match-rating">-</div>'}
+                    <div class="match-god">${match.god}</div>
+                    <div class="match-map">${match.map}</div>
+                    <div class="match-duration">${match.duration}</div>
+                    <div class="match-date">${match.date.toLocaleDateString()}</div>
+            </div>
+            `).join('') : '<p class="no-matches">No recent matches found</p>'}
+            </div>
         </div>
     `;
+    
+    // Add event listeners for match filters
+    const matchFilters = document.querySelectorAll('.match-filters .filter-btn');
+    matchFilters.forEach(btn => {
+        btn.addEventListener('click', () => {
+            // Update active button
+            matchFilters.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            
+            // Filter matches
+            const filter = btn.dataset.filter;
+            filterMatches(filter);
+        });
+    });
+}
+
+function filterMatches(filter) {
+    const matchItems = document.querySelectorAll('.match-item');
+    
+    matchItems.forEach(item => {
+        const matchType = item.dataset.matchType;
+        
+        if (filter === 'all' || matchType === filter) {
+            item.style.display = 'grid';
+        } else {
+            item.style.display = 'none';
+        }
+    });
 }
 
 function handleSearchInput() {
-    const query = playerSearch.value.trim();
+    let query = playerSearch.value.trim();
+    
+    // Remove clan tag brackets if user types them (e.g., "[CLAN]username" -> "username")
+    query = query.replace(/^\[.*?\]/, '');
+    
     if (query.length < 2) {
         searchSuggestions.classList.add('hidden');
         return;
@@ -803,11 +890,14 @@ function displaySearchSuggestions(suggestions) {
         const suggestionItem = document.createElement('div');
         suggestionItem.classList.add('search-suggestion-item');
         suggestionItem.innerHTML = `
-            <span class="suggestion-username">${player.username}</span>
+            <span class="suggestion-username">
+                ${player.clanTag ? `<span class="clan-tag">[${player.clanTag}]</span>` : ''}${player.username}
+            </span>
             <span class="suggestion-rating">${player.rating}</span>
             <span class="suggestion-rank">#${player.rank}</span>
         `;
         suggestionItem.addEventListener('click', () => {
+            // Search by username only, not including clan tag
             playerSearch.value = player.username;
             searchSuggestions.classList.add('hidden');
             fetchPlayerStats(player.username);
@@ -819,11 +909,19 @@ function displaySearchSuggestions(suggestions) {
 
 function loadInitialData() {
     try {
-        // For now, just use mock data
-        console.log('📊 Loading mock data...');
-        allPlayers = [...mockPlayers];
-        updateLeaderboard();
-        updateGlobalStats();
+        console.log('📊 Loading initial data...');
+        
+        // Only populate if we have actual data
+        if (allPlayers && allPlayers.length > 0) {
+            populateLeaderboard();
+            updateGlobalStats();
+        } else {
+            console.log('⏳ Waiting for data to load...');
+            // Show loading state
+            if (leaderboardBody) {
+                leaderboardBody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem; color: #999;">Loading player data...</td></tr>';
+            }
+        }
     } catch (error) {
         console.error('Error loading initial data:', error);
     }
@@ -856,7 +954,6 @@ function showSection(sectionId) {
         document.querySelector('.hero').classList.remove('hidden');
     } else if (sectionId === 'leaderboard') {
         document.querySelector('.leaderboard').classList.remove('hidden');
-        // Reset to first page when switching to leaderboard
         currentPage = 1;
         populateLeaderboard();
     } else if (sectionId === 'search') {
@@ -865,28 +962,85 @@ function showSection(sectionId) {
     }
 }
 
-function processCSVPlayers(csvPlayers) {
-    console.log('Processing CSV players, total records:', csvPlayers.length);
+// Filter players by leaderboard type
+function filterPlayersByLeaderboard(csvPlayers, leaderboardType = 'supremacy-1v1') {
+    const leaderboardMap = {
+        'supremacy-1v1': '1',
+        'supremacy-team': '2', 
+        'deathmatch-1v1': '3',
+        'deathmatch-team': '4'
+    };
+    
+    const targetLbId = leaderboardMap[leaderboardType];
+    if (!targetLbId) {
+        console.warn('Unknown leaderboard type:', leaderboardType);
+        return csvPlayers;
+    }
+    
+    const filtered = csvPlayers.filter(player => player.leaderboard_id === targetLbId);
+    console.log(`📊 Filtered to ${leaderboardType} (ID: ${targetLbId}): ${filtered.length} players`);
+    return filtered;
+}
+
+// Optimized CSV player processing
+function processCSVPlayers(csvPlayers, leaderboardType = 'supremacy-1v1') {
+    console.log('🔄 Processing CSV players...');
     
     if (csvPlayers.length === 0) {
         console.warn('No CSV player data to process');
         return [];
     }
     
-    // Pre-allocate array for better performance
-    const players = new Array(csvPlayers.length);
+    // Debug: Show the first player's data structure
+    console.log('📊 First player raw data:', csvPlayers[0]);
+    console.log('📊 Available columns:', Object.keys(csvPlayers[0]));
     
-    // Convert CSV player data to our format with optimized processing
-    for (let i = 0; i < csvPlayers.length; i++) {
-        const player = csvPlayers[i];
+    // Debug: Show leaderboard ID distribution
+    const leaderboardCounts = {};
+    for (let i = 0; i < Math.min(csvPlayers.length, 1000); i++) {
+        const lbId = csvPlayers[i].leaderboard_id;
+        leaderboardCounts[lbId] = (leaderboardCounts[lbId] || 0) + 1;
+    }
+    console.log('📊 Leaderboard ID distribution (first 1000 players):', leaderboardCounts);
+    
+    // Filter by leaderboard type
+    const filteredPlayers = filterPlayersByLeaderboard(csvPlayers, leaderboardType);
+    
+    if (filteredPlayers.length === 0) {
+        console.warn('No players found for leaderboard type:', leaderboardType);
+        return [];
+    }
+    
+    // Debug: Show the last few players to see the highest ratings
+    console.log('📊 Last 5 players in filtered data:', filteredPlayers.slice(-5).map(p => `${p.alias}: ${p.rating} (rank: ${p.rank}, lb: ${p.leaderboard_id})`));
+    
+    // Debug: Find the highest rating in the filtered data
+    let maxRating = 0;
+    let topPlayer = null;
+    for (let i = 0; i < filteredPlayers.length; i++) {
+        const rating = parseInt(filteredPlayers[i].rating) || 0;
+        if (rating > maxRating) {
+            maxRating = rating;
+            topPlayer = filteredPlayers[i];
+        }
+    }
+    console.log('🏆 Highest rating found:', maxRating, 'Player:', topPlayer?.alias, 'Leaderboard ID:', topPlayer?.leaderboard_id);
+    
+    // Pre-allocate array for better performance
+    const players = new Array(filteredPlayers.length);
+    
+    for (let i = 0; i < filteredPlayers.length; i++) {
+        const player = filteredPlayers[i];
         
-        // Optimized field extraction with minimal operations
+        // Extract and validate data
         const username = player.alias || player.username || `Player${i + 1}`;
         const rating = parseInt(player.rating) || 1500;
         const wins = parseInt(player.wins) || 0;
         const losses = parseInt(player.losses) || 0;
         const totalMatches = wins + losses;
         const winRate = totalMatches > 0 ? Math.round((wins / totalMatches) * 1000) / 10 : 0;
+        const clanTag = player.clan_tag || '';
+        const clanName = player.clan_name || '';
         
         players[i] = {
             id: parseInt(player.profile_id) || i + 1,
@@ -908,20 +1062,36 @@ function processCSVPlayers(csvPlayers) {
             highestRating: parseInt(player.highestrating) || rating,
             lastMatchDate: player.lastmatchdate ? new Date(parseInt(player.lastmatchdate) * 1000) : new Date(),
             country: player.country || 'Unknown',
-            socialLink: player.social_link || ''
+            socialLink: player.social_link || '',
+            clanTag: clanTag,
+            clanName: clanName
         };
     }
     
-    // Sort by rating (descending) - more efficient than map + sort
+    // Debug: Show top 5 players before sorting
+    console.log('📊 Top 5 players before sorting:', players.slice(0, 5).map(p => `${p.username}: ${p.rating} (wins: ${p.wins}, losses: ${p.losses})`));
+    
+    // Sort by rating (descending) - optimized for large arrays
+    console.log('🔄 Sorting players by rating...');
     players.sort((a, b) => b.rating - a.rating);
+    
+    // Debug: Show top 5 players after sorting
+    console.log('🏆 Top 5 players after sorting:', players.slice(0, 5).map(p => `${p.username}: ${p.rating} (wins: ${p.wins}, losses: ${p.losses})`));
     
     console.log(`✅ Processed ${players.length} players`);
     return players;
 }
 
+// Optimized leaderboard rendering
 function populateLeaderboard() {
     if (!leaderboardBody) {
         console.warn('Leaderboard body not found');
+        return;
+    }
+    
+    // Check if we have data to show
+    if (!allPlayers || allPlayers.length === 0) {
+        leaderboardBody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem; color: #999;">Loading player data...</td></tr>';
         return;
     }
     
@@ -930,13 +1100,12 @@ function populateLeaderboard() {
     const playersToShow = allPlayers.slice(startIndex, endIndex);
     
     console.log(`📊 Rendering leaderboard page ${currentPage}: players ${startIndex + 1}-${endIndex} of ${allPlayers.length}`);
-    console.log(`📊 Players to show: ${playersToShow.length}, Total players: ${allPlayers.length}`);
     
     // Clear existing content
     leaderboardBody.innerHTML = '';
     
-    // Render players in batches to prevent UI freezing
-    const batchSize = 20;
+    // Render in batches to prevent UI freezing
+    const batchSize = 25;
     let currentIndex = 0;
     
     const renderBatch = () => {
@@ -944,15 +1113,15 @@ function populateLeaderboard() {
         
         for (let i = currentIndex; i < batchEnd; i++) {
             const player = playersToShow[i];
-            const winRateClass = player.winRate >= 75 ? 'high' : player.winRate >= 60 ? 'medium' : 'low';
-            
-            // Calculate the correct display rank (global position, not CSV rank)
+        const winRateClass = player.winRate >= 75 ? 'high' : player.winRate >= 60 ? 'medium' : 'low';
             const displayRank = startIndex + i + 1;
             
             const row = document.createElement('tr');
             row.innerHTML = `
                 <td class="rank">#${displayRank}</td>
-                <td class="player-name">${player.username}</td>
+                <td class="player-name clickable-player" data-username="${player.username}">
+                    ${player.clanTag ? `<span class="clan-tag">[${player.clanTag}]</span>` : ''}${player.username}
+                </td>
                 <td class="rating">${player.rating}</td>
                 <td>${player.wins}</td>
                 <td>${player.losses}</td>
@@ -962,26 +1131,30 @@ function populateLeaderboard() {
                     ${player.favoriteGod}
                 </td>
             `;
+            
+            // Add click event to player name
+            const playerNameCell = row.querySelector('.clickable-player');
+            playerNameCell.addEventListener('click', () => {
+                fetchPlayerStats(player.username);
+            });
+            
             leaderboardBody.appendChild(row);
         }
         
         currentIndex = batchEnd;
         
-        // If there are more players to render, continue in next frame
         if (currentIndex < playersToShow.length) {
             requestAnimationFrame(renderBatch);
         } else {
-            // All players rendered, add pagination controls
             addPaginationControls();
         }
     };
     
-    // Start rendering
     renderBatch();
 }
 
 function addPaginationControls() {
-    // Remove existing pagination if any
+    // Remove existing pagination
     const existingPagination = document.getElementById('leaderboardPagination');
     if (existingPagination) {
         existingPagination.remove();
@@ -991,9 +1164,7 @@ function addPaginationControls() {
     const startPlayer = (currentPage - 1) * playersPerPage + 1;
     const endPlayer = Math.min(currentPage * playersPerPage, allPlayers.length);
     
-    // Only show pagination if there are multiple pages
     if (totalPages <= 1) {
-        // Just show the count info without pagination controls
         const infoDiv = document.createElement('div');
         infoDiv.className = 'pagination-info-only';
         infoDiv.innerHTML = `Showing all ${allPlayers.length} players`;
@@ -1020,7 +1191,6 @@ function addPaginationControls() {
         </button>
     `;
     
-    // Insert pagination after the leaderboard table
     const leaderboardTable = document.querySelector('.leaderboard table');
     if (leaderboardTable) {
         leaderboardTable.parentNode.insertBefore(pagination, leaderboardTable.nextSibling);
@@ -1043,22 +1213,133 @@ function addPaginationControls() {
 }
 
 function filterLeaderboard(filter) {
-    // In a real implementation, this would filter by game mode
-    // For now, we'll just show all players
-    populateLeaderboard();
+    console.log('🔄 Switching to leaderboard type:', filter);
+    
+    // Update active filter button
+    filterBtns.forEach(btn => btn.classList.remove('active'));
+    document.querySelector(`[data-filter="${filter}"]`).classList.add('active');
+    
+    // Update current leaderboard type
+    currentLeaderboardType = filter;
+    
+    // Reset to first page
+    currentPage = 1;
+    
+    // If we have CSV data, reprocess it with the new filter
+    if (csvDataCache.leaderboard && csvDataCache.leaderboard.length > 0) {
+        console.log('🔄 Reprocessing CSV data for leaderboard type:', filter);
+        const realPlayers = processCSVPlayers(csvDataCache.leaderboard, filter);
+        allPlayers = realPlayers;
+        
+        // Update the leaderboard display
+        populateLeaderboard();
+        
+        console.log(`✅ Switched to ${filter}: ${allPlayers.length} players loaded`);
+        } else {
+        // If no CSV data, just refresh the current display
+        populateLeaderboard();
+    }
+}
+
+
+// Match History Functions
+function getPlayerMatchHistory(playerId, limit = 10) {
+    if (!csvDataCache.matches || csvDataCache.matches.length === 0) {
+        console.log('No match data available');
+        return [];
+    }
+    
+    // Filter matches for this player and sort by most recent
+    const playerMatches = csvDataCache.matches
+        .filter(match => parseInt(match.profile_id) === playerId)
+        .sort((a, b) => parseInt(b.completiontime) - parseInt(a.completiontime))
+        .slice(0, limit);
+    
+    return playerMatches.map(match => {
+        const isRanked = parseInt(match.leaderboard_id) === 1;
+        const ratingChange = isRanked ? parseInt(match.elo) - parseInt(match.old_elo) : 0;
+        
+        // Fix win/loss detection - check resulttype field
+        let result = 'L';
+        if (match.resulttype === '1' || match.win === 'true' || match.win === true) {
+            result = 'W';
+        } else if (match.resulttype === '0' || match.win === 'false' || match.win === false) {
+            result = 'L';
+        }
+        
+        // Debug logging for first few matches
+        if (playerMatches.indexOf(match) < 3) {
+            console.log('Match debug:', {
+                matchId: match.match_id,
+                resulttype: match.resulttype,
+                win: match.win,
+                detectedResult: result,
+                isRanked: isRanked
+            });
+        }
+        
+        return {
+            matchId: match.match_id,
+            opponent: getOpponentFromMatch(match),
+            result: result,
+            ratingChange: ratingChange,
+            newRating: parseInt(match.elo),
+            god: match.god,
+            map: match.mapname,
+            duration: formatDuration(parseInt(match.duration)),
+            date: new Date(parseInt(match.completiontime) * 1000),
+            eapm: match.eapm ? parseInt(match.eapm) : null,
+            titan: match.titan === 'true',
+            wonder: match.wonder === 'true',
+            matchType: isRanked ? 'ranked' : 'custom',
+            isRanked: isRanked
+        };
+    });
+}
+
+function getOpponentFromMatch(match) {
+    // Find other players in the same match
+    const matchId = match.match_id;
+    const otherPlayers = csvDataCache.matches.filter(m => 
+        m.match_id === matchId && m.profile_id !== match.profile_id
+    );
+    
+    if (otherPlayers.length > 0) {
+        return otherPlayers[0].alias || 'Unknown';
+    }
+    return 'Unknown';
+}
+
+function formatDuration(seconds) {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    
+    if (hours > 0) {
+        return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    } else {
+        return `${minutes}:${secs.toString().padStart(2, '0')}`;
+    }
 }
 
 // Cache Functions
 function saveToCache(data) {
     try {
+        // Only cache essential data to avoid quota issues
         const cacheData = {
-            ...data,
+            leaderboard: data.leaderboard ? data.leaderboard.slice(0, 10000) : null, // Only cache top 10k players
+            lastUpdated: data.lastUpdated,
             cachedAt: Date.now()
         };
         localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
-        console.log('💾 Data saved to cache');
+        console.log('💾 Data saved to cache (top 10k players only)');
     } catch (error) {
         console.warn('Failed to save to cache:', error);
+        // Clear cache if quota exceeded
+        if (error.name === 'QuotaExceededError') {
+            console.log('🗑️ Cache quota exceeded, clearing old cache...');
+            localStorage.clear();
+        }
     }
 }
 

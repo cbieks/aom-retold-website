@@ -11,6 +11,33 @@ body {
     color: #ffffff;
     min-height: 100vh;
     line-height: 1.6;
+    position: relative;
+}
+
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image: url('https://images.igdb.com/igdb/image/upload/t_cover_big/co8x8j.jpg');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    filter: blur(4px) brightness(0.5) saturate(0.9);
+    z-index: -2;
+}
+
+body::after {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: -1;
 }
 
 .container {
@@ -27,6 +54,9 @@ body {
     position: sticky;
     top: 0;
     z-index: 1000;
+    width: 100vw;
+    margin-left: calc(-50vw + 50%);
+    padding: 0 20px;
 }
 
 .header-content {
@@ -305,10 +335,18 @@ body {
     color: #ffd700;
 }
 
+.player-header {
+    margin-left: -5.5rem;
+    padding-left: 5.5rem;
+    margin-bottom: 1rem;
+}
+
 .player-stats {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
     gap: 1.5rem;
+    margin-left: -5.5rem;
+    padding-left: 5.5rem;
 }
 
 .stat-item {
@@ -345,8 +383,53 @@ body {
     font-size: 2.5rem;
     color: #ffd700;
     text-align: center;
-    margin-bottom: 2rem;
+    margin-bottom: 1rem;
 }
+
+.api-notice {
+    background: rgba(255, 193, 7, 0.1);
+    border: 1px solid rgba(255, 193, 7, 0.3);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #ffc107;
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-align: center;
+    justify-content: center;
+}
+
+.api-notice i {
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+.api-notice-small {
+    background: rgba(255, 193, 7, 0.1);
+    border: 1px solid rgba(255, 193, 7, 0.3);
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-top: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #ffc107;
+    font-size: 0.8rem;
+    font-weight: 500;
+    text-align: center;
+    justify-content: center;
+}
+
+.api-notice-small i {
+    font-size: 0.9rem;
+    flex-shrink: 0;
+}
+
+
+
 
 .leaderboard-filters {
     display: flex;
@@ -418,6 +501,230 @@ tr:hover {
     color: #ffffff;
 }
 
+.clickable-player {
+    cursor: pointer;
+    transition: color 0.3s ease;
+}
+
+.clickable-player:hover {
+    color: #ffd700;
+}
+
+.clan-tag {
+    color: #4CAF50;
+    font-weight: 700;
+    margin-right: 4px;
+}
+
+/* API Status Indicator */
+.api-status {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 10px 15px;
+    border-radius: 8px;
+    font-size: 12px;
+    z-index: 1000;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 215, 0, 0.3);
+    transition: all 0.3s ease;
+}
+
+.api-status:hover {
+    background: rgba(0, 0, 0, 0.9);
+    border-color: rgba(255, 215, 0, 0.6);
+    transform: translateY(-2px);
+}
+
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    animation: pulse 2s infinite;
+}
+
+.status-dot.online {
+    background: #4CAF50;
+    box-shadow: 0 0 10px rgba(76, 175, 80, 0.5);
+}
+
+.status-dot.offline {
+    background: #f44336;
+    box-shadow: 0 0 10px rgba(244, 67, 54, 0.5);
+}
+
+.status-text {
+    font-weight: 600;
+    color: #ffd700;
+}
+
+.player-count {
+    color: #cccccc;
+    font-size: 11px;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+/* Match History Styles */
+.matches-section {
+    margin-top: 1rem;
+    margin-left: -5.5rem;
+    padding-left: 5.5rem;
+}
+
+.matches-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.matches-header h3 {
+    margin: 0;
+    color: #ffd700;
+    font-size: 1.5rem;
+}
+
+.match-filters {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.match-filters .filter-btn {
+    padding: 0.5rem 1rem;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid #ffd700;
+    border-radius: 6px;
+    color: #ffd700;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 0.9rem;
+}
+
+.match-filters .filter-btn:hover {
+    background: rgba(255, 215, 0, 0.1);
+}
+
+.match-filters .filter-btn.active {
+    background: #ffd700;
+    color: #1a1a2e;
+    font-weight: 600;
+}
+
+.recent-matches {
+    max-height: 400px;
+    overflow-y: auto;
+    margin-left: 0;
+    padding-left: 0;
+}
+
+.match-item {
+    display: grid;
+    grid-template-columns: 1fr auto auto auto auto auto auto;
+    gap: 1rem;
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    border-left: 4px solid transparent;
+    align-items: center;
+    font-size: 0.9rem;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.match-item.win {
+    border-left-color: #4CAF50;
+    background: rgba(76, 175, 80, 0.1);
+}
+
+.match-item.loss {
+    border-left-color: #f44336;
+    background: rgba(244, 67, 54, 0.1);
+}
+
+.match-opponent {
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.match-result {
+    font-weight: 700;
+    font-size: 1.1rem;
+    text-align: center;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    min-width: 30px;
+}
+
+.match-result.win {
+    color: #ffffff;
+    background: #4CAF50;
+}
+
+.match-result.loss {
+    color: #ffffff;
+    background: #f44336;
+}
+
+.match-rating {
+    font-weight: 600;
+    text-align: center;
+    min-width: 50px;
+}
+
+.match-rating.positive {
+    color: #4CAF50;
+}
+
+.match-rating.negative {
+    color: #f44336;
+}
+
+.match-god {
+    color: #ffd700;
+    font-weight: 500;
+    text-align: center;
+}
+
+.match-map {
+    color: #cccccc;
+    font-size: 0.8rem;
+    text-align: center;
+}
+
+.match-duration {
+    color: #cccccc;
+    font-size: 0.8rem;
+    text-align: center;
+}
+
+.match-date {
+    color: #999999;
+    font-size: 0.8rem;
+    text-align: center;
+}
+
+.no-matches {
+    text-align: center;
+    color: #999999;
+    font-style: italic;
+    padding: 2rem;
+}
+
 .rating {
     font-weight: 700;
     color: #00ff88;
@@ -463,6 +770,10 @@ tr:hover {
     border-top: 1px solid #ffd700;
     padding: 2rem 0;
     margin-top: 4rem;
+    width: 100vw;
+    margin-left: calc(-50vw + 50%);
+    padding-left: 20px;
+    padding-right: 20px;
 }
 
 .footer-content {
@@ -472,6 +783,7 @@ tr:hover {
     flex-wrap: wrap;
     gap: 1rem;
 }
+
 
 .footer-links {
     display: flex;

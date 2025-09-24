@@ -45,6 +45,10 @@
                             Search Player
                         </button>
                     </div>
+                    <div class="api-notice-small">
+                        <i class="fas fa-info-circle"></i>
+                        <span>Data updated weekly on Sundays at 4:00 PM UTC</span>
+                    </div>
                     
                     <!-- Loading Progress Indicator -->
                     <div id="loadingProgress" class="loading-progress" style="display: none;">
@@ -100,12 +104,15 @@
             <!-- Leaderboard Section -->
             <section id="leaderboard" class="leaderboard hidden">
                 <h3>Top Players</h3>
+                <div class="api-notice">
+                    <i class="fas fa-info-circle"></i>
+                    <span>Data is updated weekly on Sundays at 4:00 PM UTC. Rankings may not reflect the most recent matches.</span>
+                </div>
                 <div class="leaderboard-filters">
-                    <button class="filter-btn active" data-filter="all">All</button>
-                    <button class="filter-btn" data-filter="1v1">1v1</button>
-                    <button class="filter-btn" data-filter="2v2">2v2</button>
-                    <button class="filter-btn" data-filter="3v3">3v3</button>
-                    <button class="filter-btn" data-filter="4v4">4v4</button>
+                    <button class="filter-btn active" data-filter="supremacy-1v1">Supremacy 1v1</button>
+                    <button class="filter-btn" data-filter="supremacy-team">Supremacy Team</button>
+                    <button class="filter-btn" data-filter="deathmatch-1v1">Deathmatch 1v1</button>
+                    <button class="filter-btn" data-filter="deathmatch-team">Deathmatch Team</button>
                 </div>
                 <div class="leaderboard-table">
                     <table id="leaderboardTable">
