@@ -2,7 +2,7 @@
 
 A comprehensive web application for tracking and displaying player statistics, rankings, and match history for Age of Mythology: Retold. Built with modern web technologies and integrated with real-time data from the aomstats.io API.
 
-![Age of Mythology: Retold Stats](https://cbieks.github.io/aom-retold-website/)
+Link to view: https://cbieks.github.io/aom-retold-website/
 
 ## 🎮 Features
 
@@ -23,10 +23,6 @@ A comprehensive web application for tracking and displaying player statistics, r
 - **Rating Changes** - Track ELO progression over time
 - **God Statistics** - Favorite gods and performance data
 - **Real-Time Updates** - Data refreshes weekly from official sources
-
-## 🚀 Live Demo
-
-**GitHub Pages:** [https://cbieks.github.io/aom-retold-website/](https://cbieks.github.io/aom-retold-website/)
 
 ## 🛠️ Technical Stack
 
@@ -191,10 +187,6 @@ debugAOM.clearCache()     // Clear all cached data
 3. Commit your changes (`git commit -m 'Add amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 🙏 Acknowledgments
 
