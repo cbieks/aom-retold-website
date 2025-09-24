@@ -1,0 +1,25 @@
+# Eclipse
+.project
+.classpath
+.settings/
+
+# IntelliJ 
+.idea/
+*.iml
+
+# Build outputs
+target/
+build/
+bin/
+*.class
+*.war
+*.ear
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Logs / crashes
+*.log
+hs_err_pid*
+replay_pid*
