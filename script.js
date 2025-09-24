@@ -340,6 +340,34 @@ function showFailureStatus() {
     }, 3000);
 }
 
+// Add new function for animated loading spinner
+function createAnimatedLoadingText() {
+    const loadingSpinner = document.createElement('div');
+    loadingSpinner.id = 'animated-loading';
+    loadingSpinner.className = 'loading-spinner';
+    
+    // Add CSS for the spinner animation
+    const style = document.createElement('style');
+    style.textContent = `
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 215, 0, 0.3);
+            border-top: 2px solid #ffd700;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    `;
+    document.head.appendChild(style);
+    
+    return loadingSpinner;
+}
+
 // Initialize the website
 document.addEventListener('DOMContentLoaded', function() {
     initializeWebsite();
@@ -395,9 +423,22 @@ document.addEventListener('DOMContentLoaded', function() {
 
 function initializeWebsite() {
     // Clear initial stats - will be populated when real data loads
-    document.getElementById('totalPlayers').textContent = 'Loading...';
-    document.getElementById('totalMatches').textContent = 'Loading...';
-    document.getElementById('avgRating').textContent = 'Loading...';
+    const totalPlayersEl = document.getElementById('totalPlayers');
+    const totalMatchesEl = document.getElementById('totalMatches');
+    const avgRatingEl = document.getElementById('avgRating');
+    
+    if (totalPlayersEl) {
+        totalPlayersEl.innerHTML = '';
+        totalPlayersEl.appendChild(createAnimatedLoadingText());
+    }
+    if (totalMatchesEl) {
+        totalMatchesEl.innerHTML = '';
+        totalMatchesEl.appendChild(createAnimatedLoadingText());
+    }
+    if (avgRatingEl) {
+        avgRatingEl.innerHTML = '';
+        avgRatingEl.appendChild(createAnimatedLoadingText());
+    }
     
     // Don't populate leaderboard yet - wait for data to load
     if (leaderboardBody) {
@@ -895,14 +936,23 @@ function displayPlayerStats(player) {
             <div class="matches-header">
                 <h3>Recent Matches</h3>
                 <div class="match-filters">
-                    <button class="filter-btn active" data-filter="all">All</button>
-                    <button class="filter-btn" data-filter="ranked">Ranked 1v1</button>
-                    <button class="filter-btn" data-filter="custom">Custom/Quickplay</button>
+                    <select class="match-filter-dropdown" id="matchFilterDropdown">
+                        <option value="all">All Matches</option>
+                        <option value="supremacy-1v1" selected>1v1 Supremacy</option>
+                        <option value="supremacy-team">Team Supremacy</option>
+                        <option value="deathmatch-1v1">1v1 Deathmatch</option>
+                        <option value="deathmatch-team">Team Deathmatch</option>
+                        <option value="custom">Custom/Quickplay</option>
+                    </select>
             </div>
+            </div>
+            <div class="matches-notice">
+                <i class="fas fa-info-circle"></i>
+                <span>Showing matches from this week only</span>
             </div>
             <div class="recent-matches" id="recentMatches">
             ${matchHistory.length > 0 ? matchHistory.map(match => `
-                <div class="match-item ${match.result === 'W' ? 'win' : 'loss'}" data-match-type="${match.matchType || 'ranked'}">
+                <div class="match-item ${match.result === 'W' ? 'win' : 'loss'}" data-match-type="${match.matchType || 'ranked'}" data-leaderboard-id="${match.leaderboardId || ''}">
                     <div class="match-opponent">vs. ${match.opponent}</div>
                     <div class="match-result ${match.result === 'W' ? 'win' : 'loss'}">${match.result}</div>
                     ${match.isRanked ? `
@@ -920,19 +970,14 @@ function displayPlayerStats(player) {
         </div>
     `;
     
-    // Add event listeners for match filters
-    const matchFilters = document.querySelectorAll('.match-filters .filter-btn');
-    matchFilters.forEach(btn => {
-        btn.addEventListener('click', () => {
-            // Update active button
-            matchFilters.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            
-            // Filter matches
-            const filter = btn.dataset.filter;
+    // Add event listener for match filter dropdown
+    const matchFilterDropdown = document.getElementById('matchFilterDropdown');
+    if (matchFilterDropdown) {
+        matchFilterDropdown.addEventListener('change', () => {
+            const filter = matchFilterDropdown.value;
             filterMatches(filter);
         });
-    });
+    }
 }
 
 function filterMatches(filter) {
@@ -940,12 +985,25 @@ function filterMatches(filter) {
     
     matchItems.forEach(item => {
         const matchType = item.dataset.matchType;
+        const leaderboardId = item.dataset.leaderboardId;
         
-        if (filter === 'all' || matchType === filter) {
-            item.style.display = 'grid';
-        } else {
-            item.style.display = 'none';
+        let shouldShow = false;
+        
+        if (filter === 'all') {
+            shouldShow = true;
+        } else if (filter === 'supremacy-1v1') {
+            shouldShow = matchType === 'ranked' && leaderboardId === '1';
+        } else if (filter === 'supremacy-team') {
+            shouldShow = matchType === 'ranked' && leaderboardId === '2';
+        } else if (filter === 'deathmatch-1v1') {
+            shouldShow = matchType === 'ranked' && leaderboardId === '3';
+        } else if (filter === 'deathmatch-team') {
+            shouldShow = matchType === 'ranked' && leaderboardId === '4';
+        } else if (filter === 'custom') {
+            shouldShow = matchType === 'custom';
         }
+        
+        item.style.display = shouldShow ? 'grid' : 'none';
     });
 }
 
@@ -1380,7 +1438,8 @@ function getPlayerMatchHistory(playerId, limit = 10) {
             titan: match.titan === 'true',
             wonder: match.wonder === 'true',
             matchType: isRanked ? 'ranked' : 'custom',
-            isRanked: isRanked
+            isRanked: isRanked,
+            leaderboardId: match.leaderboard_id
         };
     });
 }

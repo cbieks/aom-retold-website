@@ -629,6 +629,55 @@ tr:hover {
     font-weight: 600;
 }
 
+.match-filter-dropdown {
+    padding: 0.5rem 1rem;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid #ffd700;
+    border-radius: 6px;
+    color: #ffd700;
+    cursor: pointer;
+    font-size: 0.9rem;
+    min-width: 150px;
+    outline: none;
+    transition: all 0.3s ease;
+}
+
+.match-filter-dropdown:hover {
+    background: rgba(255, 215, 0, 0.1);
+}
+
+.match-filter-dropdown:focus {
+    border-color: #ffed4e;
+    box-shadow: 0 0 5px rgba(255, 215, 0, 0.3);
+}
+
+.match-filter-dropdown option {
+    background: #1a1a2e;
+    color: #ffffff;
+    padding: 0.5rem;
+}
+
+.matches-notice {
+    background: rgba(255, 193, 7, 0.1);
+    border: 1px solid rgba(255, 193, 7, 0.3);
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #ffc107;
+    font-size: 0.8rem;
+    font-weight: 500;
+    text-align: center;
+    justify-content: center;
+}
+
+.matches-notice i {
+    font-size: 0.9rem;
+    flex-shrink: 0;
+}
+
 .recent-matches {
     max-height: 400px;
     overflow-y: auto;
